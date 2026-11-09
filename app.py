@@ -1,5 +1,3 @@
-from html import escape
-
 import streamlit as st
 
 
@@ -11,20 +9,17 @@ def calculate_recommendation(
     weekly_sessions_text: list[str],
 ) -> tuple[dict[str, str] | None, list[str]]:
     """Validate the form and return a personalized Pilates recommendation."""
-    required_values = [
-        first_name,
-        last_name,
-        past_classes_text,
-        *weekly_sessions_text,
-    ]
-    if (
-        any(not value.strip() for value in required_values)
-        or experience not in {"Yes", "No"}
-    ):
+    if experience not in {"Yes", "No"}:
+        return None, ["Please fill in all fields"]
+
+    required_values = [first_name, last_name, *weekly_sessions_text]
+    if experience == "Yes":
+        required_values.append(past_classes_text)
+    if any(not value.strip() for value in required_values):
         return None, ["Please fill in all fields"]
 
     try:
-        past_classes = int(past_classes_text.strip())
+        past_classes = int(past_classes_text.strip()) if experience == "Yes" else 0
         weekly_sessions = [int(value.strip()) for value in weekly_sessions_text]
     except ValueError:
         return None, ["Error: Please enter a valid positive integer"]
@@ -76,6 +71,11 @@ def calculate_recommendation(
     }, []
 
 
+def clear_recommendation() -> None:
+    st.session_state.pop("pilates_recommendation", None)
+    st.session_state.pop("pilates_errors", None)
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Pilates Path",
@@ -83,92 +83,23 @@ def main() -> None:
         layout="centered",
     )
 
-    st.markdown(
-        """
-        <style>
-        .stApp {
-            background: linear-gradient(155deg, #f4f7f3 0%, #f8f6f0 100%);
-        }
-        [data-testid="stMainBlockContainer"] {
-            max-width: 900px;
-            padding-top: 2.5rem;
-            padding-bottom: 3rem;
-        }
-        .pilates-kicker {
-            color: #55776a;
-            font-size: 0.78rem;
-            font-weight: 700;
-            letter-spacing: 0.14em;
-            margin-bottom: 0.35rem;
-            text-transform: uppercase;
-        }
-        .pilates-intro {
-            color: #5e6c65;
-            font-size: 1.05rem;
-            margin-top: -0.45rem;
-            margin-bottom: 1.6rem;
-        }
-        [data-testid="stForm"] {
-            background: rgba(255, 255, 255, 0.88);
-            border: 1px solid #e1e9e2;
-            border-radius: 22px;
-            padding: 1.4rem 1.5rem 1.1rem;
-            box-shadow: 0 12px 35px rgba(43, 73, 59, 0.06);
-        }
-        [data-testid="stTextInput"] input {
-            min-height: 46px;
-            border-radius: 12px;
-        }
-        [data-testid="stFormSubmitButton"] button {
-            min-height: 54px;
-            border: 0;
-            border-radius: 14px;
-            background: #3e6b59;
-            color: white;
-            font-size: 1.05rem;
-            font-weight: 700;
-            transition: background 150ms ease, transform 150ms ease;
-        }
-        [data-testid="stFormSubmitButton"] button:hover {
-            background: #315644;
-            color: white;
-            transform: translateY(-1px);
-        }
-        [data-testid="stMetric"] {
-            min-height: 112px;
-            padding: 1rem 1.1rem;
-            background: #f7faf7;
-            border: 1px solid #e4ece5;
-            border-radius: 16px;
-        }
-        [data-testid="stMetricValue"] {
-            color: #315b49;
-            font-size: 1.35rem;
-        }
-        @media (max-width: 640px) {
-            [data-testid="stMainBlockContainer"] {
-                padding-top: 1.5rem;
-                padding-left: 1rem;
-                padding-right: 1rem;
-            }
-            [data-testid="stForm"] {
-                padding: 1rem;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown('<div class="pilates-kicker">Pilates Path</div>', unsafe_allow_html=True)
+    st.caption("Pilates Path")
     st.title("Your Pilates plan, made for you")
-    st.markdown(
-        '<p class="pilates-intro">Share your experience and weekly plans to '
-        "find a class level and membership that fit your routine.</p>",
-        unsafe_allow_html=True,
+    st.caption(
+        "Share your experience and weekly plans to find a class level and "
+        "membership that fit your routine."
     )
 
-    with st.form("pilates_recommendation_form", border=False):
+    experience = st.radio(
+        "Have you practiced Pilates before?",
+        options=["Yes", "No"],
+        index=None,
+        horizontal=True,
+        key="prior_pilates_experience",
+        on_change=clear_recommendation,
+    )
+
+    with st.form("pilates_recommendation_form"):
         name_columns = st.columns(2)
         first_name = name_columns[0].text_input(
             "First name",
@@ -179,20 +110,22 @@ def main() -> None:
             placeholder="Enter your last name",
         )
 
-        experience_columns = st.columns(2)
-        experience = experience_columns[0].radio(
-            "Have you practiced Pilates before?",
-            options=["Yes", "No"],
-            index=None,
-            horizontal=True,
-        )
-        past_classes = experience_columns[1].text_input(
+        past_classes = st.text_input(
             "Past completed classes",
-            placeholder="Enter a whole number",
-            help="Enter 0 or more completed classes.",
+            placeholder=(
+                "Not needed"
+                if experience == "No"
+                else "Enter a whole number"
+            ),
+            help=(
+                "Not needed when you select No."
+                if experience == "No"
+                else "Enter 0 or more completed classes."
+            ),
+            disabled=experience == "No",
         )
 
-        st.markdown("**Planned sessions**")
+        st.subheader("Planned sessions")
         st.caption("Enter 1 to 7 sessions for each week.")
         week_columns = st.columns(4)
         weekly_sessions = [
@@ -226,11 +159,8 @@ def main() -> None:
 
     recommendation = st.session_state.get("pilates_recommendation")
     if recommendation:
-        st.markdown("### Your recommendation")
-        st.markdown(
-            f'<div class="pilates-kicker">Welcome</div><h2>{escape(recommendation["full_name"])}</h2>',
-            unsafe_allow_html=True,
-        )
+        st.subheader("Your recommendation")
+        st.subheader(f'Welcome, {recommendation["full_name"]}!')
 
         first_row = st.columns(2)
         first_row[0].metric("Recommended level", recommendation["level"])
@@ -245,7 +175,7 @@ def main() -> None:
         )
         second_row[1].metric("Recommended package", recommendation["package"])
 
-        st.markdown("**Motivational reminder**")
+        st.subheader("Motivational reminder")
         st.info(recommendation["reminder"])
 
 
